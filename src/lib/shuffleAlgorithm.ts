@@ -20,13 +20,36 @@ export interface RepetitionStats {
   pairCounts: Map<string, number>;
 }
 
-const TOTAL_UNITS = 120;
-const NUM_GROUPS = 15;
-const UNITS_PER_GROUP = 8; // 120 / 15
-const FIXED_UNITS = 15; // Units 1-15 are fixed
-const VARIABLE_UNITS = TOTAL_UNITS - FIXED_UNITS; // Units 16-120 (105 units)
-const VARIABLE_PER_GROUP = UNITS_PER_GROUP - 1; // 7 variable units per group
-const NUM_ROUNDS = 10;
+export interface ShuffleConfig {
+  totalUnits: number;
+  numGroups: number;
+  numRounds: number;
+  minutesPerRound: number;
+}
+
+export const DEFAULT_CONFIG: ShuffleConfig = {
+  totalUnits: 120,
+  numGroups: 15,
+  numRounds: 10,
+  minutesPerRound: 12,
+};
+
+// Derived values from config
+export function getConfigDerived(config: ShuffleConfig) {
+  const unitsPerGroup = Math.floor(config.totalUnits / config.numGroups);
+  const fixedUnits = config.numGroups; // Units 1-numGroups are fixed
+  const variableUnits = config.totalUnits - fixedUnits;
+  const variablePerGroup = unitsPerGroup - 1;
+  const totalDuration = config.numRounds * config.minutesPerRound;
+  
+  return {
+    unitsPerGroup,
+    fixedUnits,
+    variableUnits,
+    variablePerGroup,
+    totalDuration,
+  };
+}
 
 // Create a pair key for tracking
 function createPairKey(a: number, b: number): string {
@@ -52,23 +75,25 @@ function seededShuffle<T>(array: T[], seed: number): T[] {
 }
 
 // Greedy algorithm to minimize repetitions
-export function generateOptimalRounds(seed: number = 42): RoundData[] {
+export function generateOptimalRounds(seed: number = 42, config: ShuffleConfig = DEFAULT_CONFIG): RoundData[] {
+  const derived = getConfigDerived(config);
   const rounds: RoundData[] = [];
   const pairCounts = new Map<string, number>();
-  const variableUnits = Array.from({ length: VARIABLE_UNITS }, (_, i) => i + 16);
+  const variableUnits = Array.from({ length: derived.variableUnits }, (_, i) => i + config.numGroups + 1);
 
-  for (let round = 0; round < NUM_ROUNDS; round++) {
+  for (let round = 0; round < config.numRounds; round++) {
     // Score-based assignment to minimize repetitions
     const assignment = assignWithMinimalRepetition(
       variableUnits,
       pairCounts,
       round,
-      seed
+      seed,
+      config
     );
 
     const groups: GroupAssignment[] = [];
     
-    for (let g = 0; g < NUM_GROUPS; g++) {
+    for (let g = 0; g < config.numGroups; g++) {
       const groupUnits = assignment[g];
       const fixedUnit = g + 1;
       
@@ -101,13 +126,15 @@ function assignWithMinimalRepetition(
   variableUnits: number[],
   pairCounts: Map<string, number>,
   roundIndex: number,
-  baseSeed: number
+  baseSeed: number,
+  config: ShuffleConfig
 ): number[][] {
-  const groups: number[][] = Array.from({ length: NUM_GROUPS }, () => []);
+  const derived = getConfigDerived(config);
+  const groups: number[][] = Array.from({ length: config.numGroups }, () => []);
   const shuffled = seededShuffle(variableUnits, baseSeed + roundIndex * 1000);
   
   // Use different rotation offsets for each round to spread units
-  const offset = roundIndex * VARIABLE_PER_GROUP;
+  const offset = roundIndex * derived.variablePerGroup;
   
   for (let i = 0; i < shuffled.length; i++) {
     const unit = shuffled[i];
@@ -117,10 +144,10 @@ function assignWithMinimalRepetition(
     let bestCost = Infinity;
     
     // Try groups in a rotated order based on round
-    for (let attempt = 0; attempt < NUM_GROUPS; attempt++) {
-      const g = (i + offset + attempt) % NUM_GROUPS;
+    for (let attempt = 0; attempt < config.numGroups; attempt++) {
+      const g = (i + offset + attempt) % config.numGroups;
       
-      if (groups[g].length >= VARIABLE_PER_GROUP) continue;
+      if (groups[g].length >= derived.variablePerGroup) continue;
       
       // Calculate cost: sum of existing pair counts
       let cost = 0;
