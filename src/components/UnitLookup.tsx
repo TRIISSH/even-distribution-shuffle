@@ -1,32 +1,35 @@
 import { useState } from "react";
-import { RoundData, getUnitHistory } from "@/lib/shuffleAlgorithm";
-import { Search, User } from "lucide-react";
+import { RoundData, getUnitHistory, ShuffleConfig } from "@/lib/shuffleAlgorithm";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Search, MapPin } from "lucide-react";
 
 interface UnitLookupProps {
   rounds: RoundData[];
+  config: ShuffleConfig;
 }
 
-export function UnitLookup({ rounds }: UnitLookupProps) {
-  const [selectedUnit, setSelectedUnit] = useState<number | null>(null);
-  const [searchValue, setSearchValue] = useState("");
+export function UnitLookup({ rounds, config }: UnitLookupProps) {
+  const [searchUnit, setSearchUnit] = useState("");
+  const [history, setHistory] = useState<ReturnType<typeof getUnitHistory> | null>(null);
 
-  const handleSearch = (value: string) => {
-    setSearchValue(value);
-    const num = parseInt(value);
-    if (num >= 1 && num <= 120) {
-      setSelectedUnit(num);
-    } else {
-      setSelectedUnit(null);
+  const handleSearch = () => {
+    const unit = parseInt(searchUnit, 10);
+    if (unit >= 1 && unit <= config.totalUnits) {
+      setHistory(getUnitHistory(unit, rounds));
     }
   };
 
-  const history = selectedUnit ? getUnitHistory(selectedUnit, rounds) : [];
-  const isFixed = selectedUnit !== null && selectedUnit <= 15;
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  };
 
   // Count unique partners
   const allPartners = new Set<number>();
-  history.forEach((h) => h.partners.forEach((p) => allPartners.add(p)));
+  history?.forEach((h) => h.partners.forEach((p) => allPartners.add(p)));
+  const isFixed = history && history.length > 0 && parseInt(searchUnit) <= config.numGroups;
 
   return (
     <div className="glass-card rounded-2xl p-6">
@@ -35,20 +38,23 @@ export function UnitLookup({ rounds }: UnitLookupProps) {
         Unit Lookup
       </h3>
 
-      <div className="relative mb-4">
+      <div className="flex gap-2 mb-4">
         <Input
           type="number"
           min={1}
-          max={120}
-          placeholder="Enter unit number (1-120)"
-          value={searchValue}
-          onChange={(e) => handleSearch(e.target.value)}
-          className="pl-10 font-mono"
+          max={config.totalUnits}
+          placeholder={`Enter unit (1-${config.totalUnits})`}
+          value={searchUnit}
+          onChange={(e) => setSearchUnit(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="font-mono"
         />
-        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Button onClick={handleSearch} size="sm" className="px-4">
+          Track
+        </Button>
       </div>
 
-      {selectedUnit && (
+      {history && history.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <span
@@ -56,44 +62,48 @@ export function UnitLookup({ rounds }: UnitLookupProps) {
                 isFixed ? "unit-fixed" : "unit-variable"
               }`}
             >
-              {selectedUnit}
+              {searchUnit}
             </span>
             <div>
-              <div className="font-semibold">Unit {selectedUnit}</div>
+              <div className="font-semibold">Unit {searchUnit}</div>
               <div className="text-sm text-muted-foreground">
-                {isFixed ? "Fixed to Group " + selectedUnit : "Variable unit"}
+                {isFixed ? `Fixed to Group ${searchUnit}` : "Variable unit"}
               </div>
             </div>
           </div>
 
           <div className="bg-secondary/30 rounded-xl p-4">
             <div className="text-sm text-muted-foreground mb-2">
-              Meets <span className="font-mono font-bold text-foreground">{allPartners.size}</span> unique units across 10 rounds
+              Meets <span className="font-mono font-bold text-foreground">{allPartners.size}</span> unique units across {config.numRounds} rounds
             </div>
             
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {history.map((h) => (
+              {history.map((entry) => (
                 <div
-                  key={h.round}
-                  className="flex items-center gap-3 text-sm"
+                  key={entry.round}
+                  className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50"
                 >
-                  <span className="w-20 text-muted-foreground">
-                    Round {h.round}
-                  </span>
-                  <span className="w-16 font-mono text-primary">
-                    Group {h.group}
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {h.partners.map((p) => (
-                      <span
-                        key={p}
-                        className={`unit-badge w-6 h-6 text-[10px] ${
-                          p <= 15 ? "unit-fixed" : "unit-variable"
-                        }`}
-                      >
-                        {p}
-                      </span>
-                    ))}
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary text-sm font-bold shrink-0">
+                    R{entry.round}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-muted-foreground">Group</span>
+                      <span className="font-mono font-semibold">{entry.group}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {entry.partners.map((partner) => (
+                        <span
+                          key={partner}
+                          className={`unit-badge text-xs ${
+                            partner <= config.numGroups ? "unit-fixed" : "unit-variable"
+                          }`}
+                        >
+                          {partner}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -102,9 +112,15 @@ export function UnitLookup({ rounds }: UnitLookupProps) {
         </div>
       )}
 
-      {!selectedUnit && searchValue && (
-        <p className="text-sm text-muted-foreground">
-          Enter a number between 1 and 120
+      {history && history.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          Unit not found in any group.
+        </p>
+      )}
+
+      {!history && (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          Enter a unit number to see its journey across rounds.
         </p>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { RoundData } from "@/lib/shuffleAlgorithm";
+import { RoundData, ShuffleConfig } from "@/lib/shuffleAlgorithm";
 import { GroupCard } from "./GroupCard";
 import { Clock } from "lucide-react";
 
@@ -6,16 +6,25 @@ interface RoundDisplayProps {
   round: RoundData;
   isActive?: boolean;
   isAnimating?: boolean;
+  config: ShuffleConfig;
 }
 
-export function RoundDisplay({ round, isActive, isAnimating }: RoundDisplayProps) {
-  const startTime = (round.roundNumber - 1) * 12;
-  const endTime = round.roundNumber * 12;
+export function RoundDisplay({ round, isActive, isAnimating, config }: RoundDisplayProps) {
+  const startTime = (round.roundNumber - 1) * config.minutesPerRound;
+  const endTime = round.roundNumber * config.minutesPerRound;
   
   const formatTime = (minutes: number) => {
     const hrs = Math.floor(minutes / 60);
     const mins = minutes % 60;
     return `${hrs}:${mins.toString().padStart(2, '0')}`;
+  };
+
+  // Determine optimal grid columns based on number of groups
+  const getGridCols = () => {
+    if (config.numGroups <= 3) return "grid-cols-1 md:grid-cols-3";
+    if (config.numGroups <= 5) return "grid-cols-2 md:grid-cols-5";
+    if (config.numGroups <= 10) return "grid-cols-3 md:grid-cols-5";
+    return "grid-cols-3 md:grid-cols-5";
   };
 
   return (
@@ -44,12 +53,13 @@ export function RoundDisplay({ round, isActive, isAnimating }: RoundDisplayProps
         )}
       </div>
 
-      <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+      <div className={`grid ${getGridCols()} gap-3`}>
         {round.groups.map((group) => (
           <GroupCard
             key={group.groupId}
             group={group}
             isAnimating={isAnimating}
+            config={config}
           />
         ))}
       </div>
